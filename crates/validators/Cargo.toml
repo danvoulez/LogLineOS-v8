@@ -1,0 +1,8 @@
+[package]
+name = "logline_validators"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+logline_common = { path = "../common" }
+thiserror = "1"
