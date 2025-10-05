@@ -7,6 +7,7 @@ use rand::{distributions::Alphanumeric, Rng};
 use sha2::{Digest, Sha256};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use std::{collections::HashMap, sync::RwLock, time::{Duration as StdDuration, Instant}};
+use std::sync::atomic::{AtomicU64, Ordering};
 use uuid::Uuid;
 
 #[derive(Debug, Error)]
@@ -87,6 +88,8 @@ struct CachedJwk { kid: String, key: DecodingKey }
 struct JwksCache { keys_by_kid: HashMap<String, CachedJwk>, expires_at: Instant }
 
 static JWKS_CACHE: Lazy<RwLock<Option<JwksCache>>> = Lazy::new(|| RwLock::new(None));
+static JWKS_CACHE_HITS: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
+static JWKS_CACHE_MISSES: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
 
 async fn fetch_google_jwks() -> Result<(HashMap<String, CachedJwk>, StdDuration), IdentityError> {
     let disc_url = "https://accounts.google.com/.well-known/openid-configuration";
@@ -135,6 +138,7 @@ async fn refresh_and_get_key(kid: &str) -> Result<DecodingKey, IdentityError> {
         let mut guard = JWKS_CACHE.write().map_err(|_| IdentityError::Http("jwks cache".into()))?;
         *guard = Some(JwksCache { keys_by_kid: map.clone(), expires_at: Instant::now() + ttl });
     }
+    JWKS_CACHE_MISSES.fetch_add(1, Ordering::Relaxed);
     let guard = JWKS_CACHE.read().map_err(|_| IdentityError::Http("jwks cache".into()))?;
     let c = guard.as_ref().ok_or_else(|| IdentityError::Oidc("jwks empty".into()))?;
     let found = c.keys_by_kid.get(kid).ok_or_else(|| IdentityError::Oidc("kid not found after refresh".into()))?;
@@ -150,7 +154,7 @@ pub async fn validate_google_id_token_strict(
     let header = decode_header(id_token).map_err(|e| IdentityError::Jwt(e.to_string()))?;
     if header.alg != Algorithm::RS256 { return Err(IdentityError::Oidc("alg must be RS256".into())); }
     let kid = header.kid.ok_or_else(|| IdentityError::Oidc("missing kid".into()))?;
-    let key = if let Some(k) = get_cached_key(&kid) { k } else { refresh_and_get_key(&kid).await? };
+    let key = if let Some(k) = get_cached_key(&kid) { JWKS_CACHE_HITS.fetch_add(1, Ordering::Relaxed); k } else { refresh_and_get_key(&kid).await? };
     let mut validation = Validation::new(Algorithm::RS256);
     validation.validate_exp = true;
     validation.leeway = 60;
@@ -164,6 +168,9 @@ pub async fn validate_google_id_token_strict(
     if let Some(nbf) = claims.nbf { if nbf - Utc::now().timestamp() > 60 { return Err(IdentityError::Oidc("nbf too far in future".into())); } }
     Ok(claims)
 }
+
+pub fn jwks_cache_hits() -> u64 { JWKS_CACHE_HITS.load(Ordering::Relaxed) }
+pub fn jwks_cache_misses() -> u64 { JWKS_CACHE_MISSES.load(Ordering::Relaxed) }
 
 pub fn map_sub_to_llid(sub: &str) -> String { format!("llid:{}", sub) }
 
