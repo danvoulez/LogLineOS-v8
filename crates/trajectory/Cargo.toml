@@ -1,0 +1,8 @@
+[package]
+name = "logline_trajectory"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+logline_common = { path = "../common" }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }

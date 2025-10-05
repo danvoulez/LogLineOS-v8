@@ -1,0 +1,12 @@
+[package]
+name = "logline_router"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+logline_common = { path = "../common" }
+logline_validators = { path = "../validators" }
+logline_hostcalls = { path = "../hostcalls" }
+logline_trajectory = { path = "../trajectory" }
+logline_quality = { path = "../quality" }
+thiserror = "1"
