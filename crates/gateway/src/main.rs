@@ -1,4 +1,6 @@
-use axum::{routing::{get, post}, Router, Json, extract::{State, Query}, http::{HeaderMap, HeaderValue, Method, Uri}, body::Bytes, response::IntoResponse};
+use axum::{routing::{get, post}, Router, Json, extract::{State, Query, WebSocketUpgrade}, http::{HeaderMap, HeaderValue, Method, Uri}, body::Bytes, response::IntoResponse};
+use axum::extract::ws::{Message, WebSocket};
+use std::fs;
 use logline_common::{ProblemJson, Span};
 use logline_hostcalls::{Capabilities, Hostcalls};
 use logline_router::Router as IngestRouter;
@@ -9,6 +11,8 @@ use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 use logline_identity::{verify_llst_hs256, issue_llst_hs256, generate_pkce_pair};
 use logline_policy::{load_tenant_config, TenantConfig};
+use governor::{Quota, RateLimiter, clock::DefaultClock, state::{InMemoryState, NotKeyed}, middleware::NoOpMiddleware};
+use std::num::NonZeroU32;
 
 #[tokio::main]
 async fn main() {
@@ -32,7 +36,9 @@ async fn main() {
 
     let tenant_cfg_path = std::env::var("TENANT_CFG").unwrap_or_else(|_| "var/cfg/tenants/example.yaml".into());
     let tenant_cfg = load_tenant_config(&tenant_cfg_path).ok();
-    let app_state = AppState { registry, requests_total, append_total, tenant_cfg };
+    let per_tenant_quota_per_min = std::env::var("TENANT_RPS").ok().and_then(|v| v.parse::<u32>().ok()).unwrap_or(120);
+    let limiter: RateLimiter<NotKeyed, InMemoryState, DefaultClock, NoOpMiddleware> = RateLimiter::direct(Quota::per_minute(NonZeroU32::new(per_tenant_quota_per_min).unwrap()));
+    let app_state = AppState { registry, requests_total, append_total, tenant_cfg, limiter };
 
     let app = Router::new()
         .route("/healthz", get(|| async { "ok" }))
@@ -40,6 +46,10 @@ async fn main() {
         .route("/ingest", post(ingest))
         .route("/auth/llst", post(issue_llst))
         .route("/ingest.ndjson", post(ingest_ndjson))
+        .route("/ledger/stream", get(ledger_stream))
+        .route("/ws", get(ws_upgrade))
+        .route("/oidc/validate", post(oidc_validate))
+        .route("/openapi.json", get(openapi))
         .route("/oidc/login", get(oidc_login))
         .route("/oidc/callback", get(oidc_callback))
         .with_state(Arc::new(app_state))
@@ -52,12 +62,12 @@ async fn main() {
         .unwrap();
 }
 
-#[derive(Clone)]
 struct AppState {
     registry: Registry,
     requests_total: IntCounter,
     append_total: IntCounter,
     tenant_cfg: Option<TenantConfig>,
+    limiter: RateLimiter<NotKeyed, InMemoryState, DefaultClock, NoOpMiddleware>,
 }
 
 async fn ingest(State(state): State<Arc<AppState>>, headers: HeaderMap, Json(span): Json<Span>) -> Result<Json<serde_json::Value>, (axum::http::StatusCode, Json<ProblemJson>)> {
@@ -93,6 +103,11 @@ async fn ingest(State(state): State<Arc<AppState>>, headers: HeaderMap, Json(spa
         let _diamond_enabled = cfg.features.diamond.unwrap_or(false);
     }
 
+    // Rate-limit per process (M0 simplified)
+    if state.limiter.check().is_err() {
+        let problem = ProblemJson::new(429, "rate limit exceeded");
+        return Err((axum::http::StatusCode::TOO_MANY_REQUESTS, Json(problem)));
+    }
     let host = Hostcalls::new(Capabilities::default(), "var");
     let router = IngestRouter::new(host);
     match router.ingest(&span) {
@@ -172,9 +187,64 @@ async fn oidc_login(Query(params): Query<OidcLoginParams>) -> impl IntoResponse 
 #[derive(serde::Deserialize)]
 struct OidcCallbackParams { code: String, redirect_uri: String, verifier: String }
 
-async fn oidc_callback(Query(params): Query<OidcCallbackParams>) -> impl IntoResponse {
+async fn oidc_callback(Query(_params): Query<OidcCallbackParams>) -> impl IntoResponse {
     // Token exchange omitted in M0; return a stub
     Json(serde_json::json!({ "ok": true, "note": "Token exchange not implemented in M0" }))
+}
+
+async fn ledger_stream() -> impl IntoResponse {
+    match fs::read("var/ledger/segments/000001.ndjson") {
+        Ok(bytes) => (
+            axum::http::StatusCode::OK,
+            [(axum::http::header::CONTENT_TYPE, HeaderValue::from_static("application/x-ndjson"))],
+            bytes,
+        ),
+        Err(_) => (
+            axum::http::StatusCode::OK,
+            [(axum::http::header::CONTENT_TYPE, HeaderValue::from_static("application/x-ndjson"))],
+            Vec::new(),
+        ),
+    }
+}
+
+async fn ws_upgrade(ws: WebSocketUpgrade) -> impl IntoResponse {
+    ws.on_upgrade(handle_socket)
+}
+
+async fn handle_socket(mut socket: WebSocket) {
+    let _ = socket
+        .send(Message::Text("welcome to receipts bus (M0 stub)".into()))
+        .await;
+}
+
+#[derive(serde::Deserialize)]
+struct OidcValidateRequest { id_token: String, audience: String }
+
+async fn oidc_validate(Json(req): Json<OidcValidateRequest>) -> Result<Json<serde_json::Value>, (axum::http::StatusCode, Json<ProblemJson>)> {
+    match logline_identity::validate_google_id_token(&req.id_token, &req.audience).await {
+        Ok(claims) => Ok(Json(serde_json::json!({ "ok": true, "claims": claims }))),
+        Err(e) => Err((axum::http::StatusCode::UNAUTHORIZED, Json(ProblemJson::new(401, format!("invalid id_token: {}", e))))),
+    }
+}
+
+async fn openapi() -> impl IntoResponse {
+    let doc = serde_json::json!({
+        "openapi": "3.0.0",
+        "info": { "title": "LogLineOS v8 API (M0)", "version": "0.1.0" },
+        "paths": {
+            "/healthz": {"get": {"responses": {"200": {}}}},
+            "/metrics": {"get": {"responses": {"200": {}}}},
+            "/ingest": {"post": {"requestBody": {"content": {"application/json": {}}}, "responses": {"200": {}}}},
+            "/ingest.ndjson": {"post": {"requestBody": {"content": {"application/x-ndjson": {}}}, "responses": {"200": {}}}},
+            "/ledger/stream": {"get": {"responses": {"200": {"content": {"application/x-ndjson": {}}}}}},
+            "/auth/llst": {"post": {"requestBody": {"content": {"application/json": {}}}, "responses": {"200": {}}}},
+            "/oidc/login": {"get": {"parameters": [{"name": "redirect_uri", "in": "query"}], "responses": {"200": {}}}},
+            "/oidc/callback": {"get": {"responses": {"200": {}}}},
+            "/oidc/validate": {"post": {"requestBody": {"content": {"application/json": {}}}, "responses": {"200": {}}}},
+            "/ws": {"get": {"responses": {"101": {}}}}
+        }
+    });
+    (axum::http::StatusCode::OK, Json(doc))
 }
 
 #[derive(serde::Deserialize)]
