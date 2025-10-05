@@ -7,11 +7,21 @@ pub struct FeatureFlags {
     pub diamond: Option<bool>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct QualityPolicy {
+    #[serde(default)]
+    pub min_score: Option<i32>,
+    #[serde(default)]
+    pub percentile_target: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TenantConfig {
     pub tenant: String,
     #[serde(default)]
     pub features: FeatureFlags,
+    #[serde(default)]
+    pub quality: QualityPolicy,
 }
 
 #[derive(Debug, Error)]

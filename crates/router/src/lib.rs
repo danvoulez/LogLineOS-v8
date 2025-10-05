@@ -30,7 +30,8 @@ impl Router {
         if let DerivedEvent::TrajectoryEdge { trajectory_id, .. } = edge {
             let q = trajectory_quality(&trajectory_id, &span.tenant);
             if let DerivedEvent::TrajectoryQuality { score, .. } = &q {
-                if let Some(cand) = quality_meter(&trajectory_id, *score, &span.tenant, 60) {
+                let threshold = std::env::var("QUALITY_MIN_SCORE").ok().and_then(|v| v.parse::<i32>().ok()).unwrap_or(60);
+                if let Some(cand) = quality_meter(&trajectory_id, *score, &span.tenant, threshold) {
                     let _ = self.host.emit_derived(&cand);
                 }
             }

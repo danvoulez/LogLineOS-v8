@@ -816,8 +816,10 @@ dependencies = [
  "logline_router",
  "logline_runtime",
  "logline_validators",
+ "once_cell",
  "parking_lot",
  "prometheus",
+ "reqwest",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
@@ -847,6 +849,7 @@ dependencies = [
  "base64",
  "chrono",
  "jsonwebtoken",
+ "once_cell",
  "rand 0.8.5",
  "reqwest",
  "serde",
@@ -854,6 +857,7 @@ dependencies = [
  "sha2",
  "thiserror 1.0.69",
  "tokio",
+ "uuid",
 ]
 
 [[package]]
