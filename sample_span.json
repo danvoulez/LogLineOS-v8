@@ -1,0 +1,10 @@
+{
+  "id": "s_01",
+  "tenant": "t_example",
+  "who": "user_1",
+  "did": "sale.post",
+  "this": "order:123",
+  "when": "2025-10-05T22:18:07Z",
+  "status": "confirmed",
+  "data": {"gross": 19.90}
+}

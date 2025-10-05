@@ -14,3 +14,12 @@ logline_common = { path = "../common" }
 logline_runtime = { path = "../runtime" }
 logline_validators = { path = "../validators" }
 thiserror = "1"
+logline_identity = { path = "../identity" }
+prometheus = "0.13"
+tower-http = { version = "0.5", features = ["cors"] }
+logline_policy = { path = "../policy" }
+logline_router = { path = "../router" }
+logline_hostcalls = { path = "../hostcalls" }
+parking_lot = "0.12"
+uuid = { version = "1", features = ["v4"] }
+urlencoding = "2"

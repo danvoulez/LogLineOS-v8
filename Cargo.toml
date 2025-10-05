@@ -4,6 +4,10 @@ members = [
     "crates/runtime",
     "crates/policy",
     "crates/validators",
+    "crates/identity",
+    "crates/router",
+    "crates/hostcalls",
+    "crates/loader",
     "crates/gateway",
 ]
 resolver = "2"
