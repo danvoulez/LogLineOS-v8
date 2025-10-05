@@ -7,6 +7,8 @@ members = [
     "crates/identity",
     "crates/router",
     "crates/hostcalls",
+    "crates/trajectory",
+    "crates/quality",
     "crates/loader",
     "crates/gateway",
 ]

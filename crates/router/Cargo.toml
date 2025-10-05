@@ -7,4 +7,6 @@ edition = "2021"
 logline_common = { path = "../common" }
 logline_validators = { path = "../validators" }
 logline_hostcalls = { path = "../hostcalls" }
+logline_trajectory = { path = "../trajectory" }
+logline_quality = { path = "../quality" }
 thiserror = "1"

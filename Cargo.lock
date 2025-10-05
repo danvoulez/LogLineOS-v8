@@ -876,11 +876,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "logline_quality"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "logline_common",
+]
+
+[[package]]
 name = "logline_router"
 version = "0.1.0"
 dependencies = [
  "logline_common",
  "logline_hostcalls",
+ "logline_quality",
+ "logline_trajectory",
  "logline_validators",
  "thiserror 1.0.69",
 ]
@@ -895,6 +905,14 @@ dependencies = [
  "serde_json",
  "thiserror 1.0.69",
  "uuid",
+]
+
+[[package]]
+name = "logline_trajectory"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "logline_common",
 ]
 
 [[package]]

@@ -24,6 +24,50 @@ pub enum SpanStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QualityComponents {
+    pub mass: i32,
+    pub persistence: i32,
+    pub verification: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum DerivedEvent {
+    #[serde(rename = "trajectory_edge")]
+    TrajectoryEdge {
+        trajectory_id: String,
+        position: i32,
+        src_span_id: String,
+        this: String,
+        tenant: String,
+        ts: String,
+    },
+    #[serde(rename = "trajectory_closed")]
+    TrajectoryClosed {
+        trajectory_id: String,
+        reason: String,
+        tenant: String,
+        ts: String,
+    },
+    #[serde(rename = "trajectory_quality")]
+    TrajectoryQuality {
+        trajectory_id: String,
+        score: i32,
+        components: QualityComponents,
+        tenant: String,
+        ts: String,
+    },
+    #[serde(rename = "diamond_candidate")]
+    DiamondCandidate {
+        trajectory_id: String,
+        score: i32,
+        threshold: i32,
+        tenant: String,
+        ts: String,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Receipt {
     pub op: String, // e.g., "ledger.append"
     pub span_id: String,

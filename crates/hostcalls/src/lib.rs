@@ -1,4 +1,4 @@
-use logline_common::Span;
+use logline_common::{Span, DerivedEvent};
 use logline_runtime::{Ledger, FileLedger};
 use thiserror::Error;
 
@@ -32,5 +32,10 @@ impl Hostcalls {
     pub fn ledger_append(&self, span: &Span) -> Result<logline_common::Receipt, HostcallError> {
         if !self.caps.allow_ledger_append { return Err(HostcallError::Capability("ledger.append")); }
         Ok(self.ledger.append(span)?)
+    }
+
+    pub fn emit_derived(&self, _event: &DerivedEvent) -> Result<(), HostcallError> {
+        // M1: stub; would append to a derived channel or ledger partition.
+        Ok(())
     }
 }
