@@ -26,8 +26,14 @@ async fn main() {
     let registry = Registry::new();
     let requests_total = IntCounter::new("gateway_requests_total", "Total HTTP requests").unwrap();
     let append_total = IntCounter::new("ledger_append_total", "Total ledger.append operations").unwrap();
+    let derived_edge_total = IntCounter::new("trajectory_edge_total", "Total trajectory_edge events").unwrap();
+    let derived_quality_total = IntCounter::new("trajectory_quality_total", "Total trajectory_quality events").unwrap();
+    let derived_candidate_total = IntCounter::new("diamond_candidate_total", "Total diamond_candidate events").unwrap();
     registry.register(Box::new(requests_total.clone())).unwrap();
     registry.register(Box::new(append_total.clone())).unwrap();
+    registry.register(Box::new(derived_edge_total.clone())).unwrap();
+    registry.register(Box::new(derived_quality_total.clone())).unwrap();
+    registry.register(Box::new(derived_candidate_total.clone())).unwrap();
 
     let cors = CorsLayer::new()
         .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
@@ -38,7 +44,7 @@ async fn main() {
     let tenant_cfg = load_tenant_config(&tenant_cfg_path).ok();
     let per_tenant_quota_per_min = std::env::var("TENANT_RPS").ok().and_then(|v| v.parse::<u32>().ok()).unwrap_or(120);
     let limiter: RateLimiter<NotKeyed, InMemoryState, DefaultClock, NoOpMiddleware> = RateLimiter::direct(Quota::per_minute(NonZeroU32::new(per_tenant_quota_per_min).unwrap()));
-    let app_state = AppState { registry, requests_total, append_total, tenant_cfg, limiter };
+    let app_state = AppState { registry, requests_total, append_total, tenant_cfg, limiter, derived_edge_total, derived_quality_total, derived_candidate_total };
 
     let app = Router::new()
         .route("/healthz", get(|| async { "ok" }))
@@ -68,6 +74,9 @@ struct AppState {
     append_total: IntCounter,
     tenant_cfg: Option<TenantConfig>,
     limiter: RateLimiter<NotKeyed, InMemoryState, DefaultClock, NoOpMiddleware>,
+    derived_edge_total: IntCounter,
+    derived_quality_total: IntCounter,
+    derived_candidate_total: IntCounter,
 }
 
 async fn ingest(State(state): State<Arc<AppState>>, headers: HeaderMap, Json(span): Json<Span>) -> Result<Json<serde_json::Value>, (axum::http::StatusCode, Json<ProblemJson>)> {
