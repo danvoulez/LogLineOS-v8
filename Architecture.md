@@ -1,5 +1,3 @@
-Faca a parte II desse texto com informacoes extras ou refaca o texto todo com mais informacoes
-
 # LogLineOS v8 — Arquitetura prevista (explicação “Readme de linhas”)
 
 ## 0) Posição da v8 (o que muda da v7)
